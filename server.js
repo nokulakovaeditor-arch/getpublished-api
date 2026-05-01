@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Раздаем интерфейс (ваш файл public/index.html)
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'client')));
 
 // ==========================================
 // НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ TIMEWEB
