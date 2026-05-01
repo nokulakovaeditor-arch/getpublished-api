@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Система GetPublishED</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- ИКОНКИ ---
+    const Icon = ({ name, size=24, className="" }) => {
+      useEffect(() => { lucide.createIcons(); });
+      return <i data-lucide={name} style={{width: size, height: size}} className={`inline-block ${className}`}></i>;
+    };
+    const Calendar = p => <Icon name="calendar" {...p} />; const Clock = p => <Icon name="clock" {...p} />; const User = p => <Icon name="user" {...p} />; const CheckCircle = p => <Icon name="check-circle" {...p} />; const AlertCircle = p => <Icon name="alert-circle" {...p} />; const Users = p => <Icon name="users" {...p} />; const Trash2 = p => <Icon name="trash-2" {...p} />; const Plus = p => <Icon name="plus" {...p} />; const Mail = p => <Icon name="mail" {...p} />; const Phone = p => <Icon name="phone" {...p} />; const Search = p => <Icon name="search" {...p} />; const UserPlus = p => <Icon name="user-plus" {...p} />; const ToggleLeft = p => <Icon name="toggle-left" {...p} />; const ToggleRight = p => <Icon name="toggle-right" {...p} />; const Lock = p => <Icon name="lock" {...p} />; const ArrowLeft = p => <Icon name="arrow-left" {...p} />; const LogOut = p => <Icon name="log-out" {...p} />;
+
+    // --- ГЕНЕРАТОР ДАТ ---
+    const generateDates = (days) => {
+      const dates = []; const today = new Date(); const weekdays = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']; const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+      for (let i = 0; i < days; i++) {
+        const d = new Date(today); d.setDate(today.getDate() + i);
+        const id = d.toISOString().split('T')[0];
+        const label = i === 0 ? `Сегодня, ${d.getDate()} ${months[d.getMonth()]}` : i === 1 ? `Завтра, ${d.getDate()} ${months[d.getMonth()]}` : `${d.getDate()} ${months[d.getMonth()]}, ${weekdays[d.getDay()]}`;
+        dates.push({ id, label });
+      }
+      return dates;
+    };
+    const DYNAMIC_DATES = generateDates(14);
+
+    // --- РЕЗЕРВНЫЕ ДАННЫЕ (ЕСЛИ СЕРВЕР НЕДОСТУПЕН) ---
+    const FALLBACK_DIAGS = [
+      { id: 'd1', name: 'Александр Савкин', is_active: true },
+      { id: 'd2', name: 'Оксана Зарандия', is_active: true },
+      { id: 'd3', name: 'Елена Краснова', is_active: true }
+    ];
+    const FALLBACK_SLOTS = [
+      { id: 's1', dateid: DYNAMIC_DATES[0].id, diagid: 'd1', time: '10:00', status: 'free' },
+      { id: 's2', dateid: DYNAMIC_DATES[0].id, diagid: 'd2', time: '12:00', status: 'booked', clientname: 'Иван Иванов', email: 'ivan@test.ru', phone: '+79990000000' },
+      { id: 's3', dateid: DYNAMIC_DATES[1].id, diagid: 'd3', time: '14:00', status: 'free' }
+    ];
+
+    // --- ПОДВАЛ ---
+    function Footer() {
+      return (
+        <footer className="w-full max-w-4xl mx-auto mt-12 px-4 pb-4 font-sans">
+          <div className="flex flex-col md:flex-row justify-between gap-6 mb-6">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 mb-2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="12" r="5" fill="#f494a8" opacity="0.8" /><circle cx="15" cy="9" r="4" fill="#f494a8" opacity="0.9" /><circle cx="15" cy="16" r="3" fill="#f494a8" opacity="0.7" /></svg><span className="font-bold text-xl text-slate-900 tracking-tight">GetPublishED</span></div>
+              <div className="text-slate-500 text-sm">ИП Гончаренко Сергей Владимирович</div><div className="text-slate-500 text-sm">ИНН 771000780300</div>
+            </div>
+            <div className="flex flex-col gap-1.5 md:text-right text-left">
+              <div className="text-slate-700 font-medium mb-1">+7 (958) 100-34-97</div>
+              <a href="#" className="text-slate-500 text-sm hover:text-slate-800">Политика конфиденциальности</a>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 pt-6 text-center text-xs text-slate-400">© 2026 Все права защищены.</div>
+        </footer>
+      );
+    }
+
+    // --- БЕЗОПАСНЫЙ ЛОГИН ---
+    function LoginScreen({ onLogin, onCancel, isOffline }) {
+      const [password, setPassword] = useState(''); const [error, setError] = useState(false); const [isLoading, setIsLoading] = useState(false);
+      
+      const handleSubmit = async (e) => {
+        e.preventDefault(); setIsLoading(true); setError(false);
+        if (isOffline) {
+            // В оффлайн режиме (предпросмотр) пускаем по тестовому паролю
+            setTimeout(() => {
+                if (password === 'admin2026') { sessionStorage.setItem('gp_token', 'test_token'); onLogin(); }
+                else { setError(true); setPassword(''); setIsLoading(false); }
+            }, 500);
+            return;
+        }
+
+        try {
+          const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+          const data = await res.json();
+          if (data.success) { sessionStorage.setItem('gp_token', data.token); onLogin(); } 
+          else { setError(true); setPassword(''); }
+        } catch(err) { setError(true); } finally { setIsLoading(false); }
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white mb-4 mx-auto shadow-lg"><Lock size={32} /></div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Вход в систему</h2>
+            {isOffline && <p className="text-sm text-yellow-600 mb-4 bg-yellow-50 p-2 rounded">Режим без базы данных. Пароль: admin2026</p>}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <input type="password" placeholder="Пароль доступа" value={password} onChange={e => { setPassword(e.target.value); setError(false); }} className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 ${error ? 'border-red-500 bg-red-50 focus:ring-red-200' : 'border-slate-300 focus:ring-slate-800'}`} autoFocus disabled={isLoading} />
+              {error && <p className="text-red-500 text-sm font-medium mt-2">Неверный пароль</p>}
+              <button type="submit" disabled={isLoading} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-md">{isLoading ? 'Проверка...' : 'Войти'}</button>
+            </form>
+            <button onClick={onCancel} className="mt-6 w-full flex items-center justify-center gap-2 text-slate-500 hover:text-slate-800 text-sm font-medium"><ArrowLeft size={16} /> Вернуться на сайт</button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- ПАНЕЛЬ УПРАВЛЕНИЯ (АДМИН) ---
+    function AdminDashboard({ slots, diagnosticians, onLogout, refreshData, isOffline }) {
+      const [activeTab, setActiveTab] = useState('bookings');
+      const [searchTerm, setSearchTerm] = useState('');
+      const activeDiags = diagnosticians.filter(d => d.is_active);
+      const [newDate, setNewDate] = useState(''); const [newTime, setNewTime] = useState(''); const [newDiag, setNewDiag] = useState(activeDiags[0]?.id || '');
+      
+      const handleAddSlot = async (e) => {
+        e.preventDefault();
+        if(isOffline) { alert('В режиме предпросмотра данные сохраняются только до перезагрузки страницы'); refreshData({action: 'add', slot: {id: `s_${Date.now()}`, dateid: newDate, time: newTime, diagid: newDiag, status: 'free'}}); setNewTime(''); return; }
+        const res = await fetch('/api/slots', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: `s_${Date.now()}`, dateId: newDate, time: newTime, diagId: newDiag}) });
+        if(res.ok) { setNewTime(''); refreshData(); }
+      };
+
+      const handleDeleteSlot = async (id) => {
+        if(!confirm('Удалить слот навсегда? Если на него была запись, она тоже удалится.')) return;
+        if(isOffline) { refreshData({action: 'delete', id}); return; }
+        await fetch(`/api/slots/${id}`, { method: 'DELETE' }); refreshData();
+      };
+
+      const handleCancelBooking = async (id) => {
+        if(!confirm('Освободить слот? Запись клиента будет удалена.')) return;
+        if(isOffline) { refreshData({action: 'cancel', id}); return; }
+        await fetch('/api/cancel-booking', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({slot_id: id}) }); refreshData();
+      };
+
+      const bookedSlots = slots.filter(s => s.status === 'booked');
+      const freeSlots = slots.filter(s => s.status === 'free');
+      const filteredBookings = bookedSlots.filter(s => ((s.clientname||'').toLowerCase().includes(searchTerm.toLowerCase()) || (s.email||'').toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone||'').toLowerCase().includes(searchTerm.toLowerCase())));
+
+      return (
+        <div className="min-h-screen bg-slate-100 font-sans pb-12">
+          <nav className="bg-slate-900 text-white shadow-xl mb-8">
+            <div className="max-w-7xl mx-auto px-6 flex justify-between h-16 items-center">
+              <div className="flex items-center gap-3"><div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold text-white shadow-sm">GP</div><span className="font-bold text-lg tracking-wide">Панель Управления</span></div>
+              <button onClick={() => { sessionStorage.removeItem('gp_token'); onLogout(); }} className="flex items-center gap-2 text-slate-300 hover:text-white bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium"><LogOut size={16} /> Выйти</button>
+            </div>
+          </nav>
+          <div className="max-w-7xl mx-auto px-6">
+            {isOffline && <div className="mb-6 p-4 bg-yellow-100 text-yellow-800 rounded-lg flex items-center gap-2"><AlertCircle size={20}/> Режим работы без сервера. Изменения не сохранятся в базе.</div>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-200 flex items-center gap-5"><div className="p-4 bg-blue-50 text-blue-600 rounded-xl"><Users size={28} /></div><div><div className="text-sm text-slate-500 font-bold uppercase tracking-wider">Записей</div><div className="text-3xl font-black text-slate-800">{bookedSlots.length}</div></div></div>
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-200 flex items-center gap-5"><div className="p-4 bg-green-50 text-green-600 rounded-xl"><CheckCircle size={28} /></div><div><div className="text-sm text-slate-500 font-bold uppercase tracking-wider">Свободных окон</div><div className="text-3xl font-black text-slate-800">{freeSlots.length}</div></div></div>
+            </div>
+            <div className="flex space-x-2 bg-slate-200 p-1.5 rounded-xl w-fit mb-8 shadow-inner overflow-x-auto">
+              <button onClick={()=>setActiveTab('bookings')} className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab==='bookings'?'bg-white shadow-md text-slate-900':'text-slate-500 hover:bg-slate-300/50'}`}>Журнал записей</button>
+              <button onClick={()=>setActiveTab('slots')} className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab==='slots'?'bg-white shadow-md text-slate-900':'text-slate-500 hover:bg-slate-300/50'}`}>Управление расписанием</button>
+            </div>
+
+            {activeTab === 'bookings' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                  <h2 className="text-xl font-bold text-slate-800">Встречи</h2>
+                  <input type="text" placeholder="Поиск..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64 px-4 py-2 border rounded-xl" />
+                </div>
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr className="border-b"><th className="px-6 py-4">Дата / Время</th><th className="px-6 py-4">Клиент</th><th className="px-6 py-4">Контакты</th><th className="px-6 py-4">Диагност</th><th className="px-6 py-4 text-right">Управление</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {filteredBookings.map(s => (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-4 font-bold">{s.dateid}<br/><span className="text-blue-600">{s.time}</span></td>
+                        <td className="px-6 py-4 font-bold">{s.clientname}</td>
+                        <td className="px-6 py-4 text-slate-600">{s.email}<br/>{s.phone}</td>
+                        <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-bold">{diagnosticians.find(d=>d.id===s.diagid)?.name}</span></td>
+                        <td className="px-6 py-4 text-right"><button onClick={()=>handleCancelBooking(s.id)} className="text-red-500 hover:text-red-700 text-xs font-bold border border-red-200 px-3 py-1 rounded">Освободить</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {activeTab === 'slots' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="bg-white rounded-2xl border p-6 h-fit">
+                  <h2 className="font-bold mb-4 text-lg">Создать слот</h2>
+                  <form onSubmit={handleAddSlot} className="space-y-4">
+                    <select value={newDiag} onChange={e=>setNewDiag(e.target.value)} className="w-full px-3 py-2 border rounded-lg bg-slate-50">{activeDiags.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>
+                    <input type="date" required value={newDate} onChange={e=>setNewDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg bg-slate-50" />
+                    <input type="time" required value={newTime} onChange={e=>setNewTime(e.target.value)} className="w-full px-3 py-2 border rounded-lg bg-slate-50" />
+                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-2.5 rounded-lg">Добавить</button>
+                  </form>
+                </div>
+                <div className="lg:col-span-2 bg-white rounded-2xl border overflow-hidden">
+                  <div className="p-6 border-b"><h2 className="font-bold text-lg">Все слоты</h2></div>
+                  <div className="grid grid-cols-2 gap-4 p-6">
+                    {slots.map(s => (
+                      <div key={s.id} className={`p-4 border rounded-xl flex flex-col justify-between ${s.status==='booked'?'border-l-4 border-l-blue-500':'border-l-4 border-l-green-400'}`}>
+                        <div className="flex justify-between">
+                          <div><div className="font-black text-xl">{s.time}</div><div className="text-xs text-slate-500">{s.dateid}</div></div>
+                          <span className={`text-xs px-2 py-1 rounded font-bold ${s.status==='booked'?'bg-blue-100 text-blue-700':'bg-green-100 text-green-700'}`}>{s.status==='booked'?'Занято':'Свободно'}</span>
+                        </div>
+                        <div className="text-sm mt-3 pt-2 border-t text-slate-600">{diagnosticians.find(d=>d.id===s.diagid)?.name}</div>
+                        <div className="flex justify-end mt-2"><button onClick={()=>handleDeleteSlot(s.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- КЛИЕНТСКИЙ САЙТ (ВИДЖЕТ) ---
+    function ClientWidget({ slots, diagnosticians, onAdminClick, refreshData, isOffline }) {
+      const [searchMode, setSearchMode] = useState('byDate');
+      const activeDiagnosticians = diagnosticians.filter(d => d.is_active);
+      const [selectedDiag, setSelectedDiag] = useState(activeDiagnosticians[0]?.id);
+      const [selectedDate, setSelectedDate] = useState(DYNAMIC_DATES[0].id);
+      const [bookingSlot, setBookingSlot] = useState(null);
+      
+      const [firstName, setFirstName] = useState(''); const [lastName, setLastName] = useState(''); const [email, setEmail] = useState(''); const [phone, setPhone] = useState('');
+      const [isSubmitted, setIsSubmitted] = useState(false);
+      const [isBookingNow, setIsBookingNow] = useState(false);
+
+      const currentSlots = slots.filter(slot => {
+        const isDiagActive = diagnosticians.find(d => d.id === slot.diagid)?.is_active;
+        if (!isDiagActive) return false;
+        if (searchMode === 'byDiag') return slot.diagid === selectedDiag && slot.dateid === selectedDate;
+        return slot.dateid === selectedDate;
+      }).sort((a, b) => a.time.localeCompare(b.time));
+
+      const handlePhoneInput = (e) => {
+        const val = e.target.value;
+        if (/[a-zA-Zа-яА-Я@]/.test(val)) { setPhone(val); return; }
+        let numbers = val.replace(/\D/g, '');
+        if (!numbers) { setPhone(''); return; }
+        if (['7', '8', '9'].includes(numbers[0])) {
+          if (numbers[0] === '9') numbers = '7' + numbers;
+          let res = (numbers[0] === '8' ? '8' : '+7') + ' ';
+          if (numbers.length > 1) res += '(' + numbers.substring(1, 4);
+          if (numbers.length >= 5) res += ') ' + numbers.substring(4, 7);
+          if (numbers.length >= 8) res += '-' + numbers.substring(7, 9);
+          if (numbers.length >= 10) res += '-' + numbers.substring(9, 11);
+          setPhone(res);
+        } else { setPhone('+' + numbers); }
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault(); setIsBookingNow(true);
+        if (isOffline) {
+            setTimeout(() => {
+                refreshData({action: 'book', id: bookingSlot.id, clientname: `${firstName} ${lastName}`, email, phone });
+                setIsBookingNow(false); setIsSubmitted(true);
+            }, 500);
+            return;
+        }
+
+        try {
+          const res = await fetch('/api/book', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slot_id: bookingSlot.id, clientName: `${firstName.trim()} ${lastName.trim()}`, email: email.trim(), phone: phone.trim() })
+          });
+          setIsBookingNow(false);
+          if(res.ok) { setIsSubmitted(true); refreshData(); } else alert('Ошибка бронирования.');
+        } catch(err) { setIsBookingNow(false); alert('Ошибка связи с сервером.'); }
+      };
+
+      if (isSubmitted && bookingSlot) return (
+        <div className="min-h-screen bg-slate-50 py-12 px-4 flex flex-col font-sans">
+          <div className="max-w-2xl mx-auto w-full p-8 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} /></div>
+            <h2 className="text-3xl font-bold text-slate-800 mb-6">Встреча подтверждена!</h2>
+            <p className="text-slate-600 mb-8 max-w-md">За сутки до встречи мы свяжемся с вами. Если планы изменятся, предупредите нас.</p>
+            <button onClick={()=>{setIsSubmitted(false); setBookingSlot(null); setFirstName(''); setLastName(''); setEmail(''); setPhone('');}} className="px-8 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200">Вернуться к расписанию</button>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-50 py-12 px-4 flex flex-col font-sans">
+          <div className="max-w-3xl mx-auto w-full p-8 bg-white rounded-2xl shadow-sm border border-slate-200">
+            {isOffline && <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded-full"><AlertCircle size={14}/> Демонстрационный режим (без подключения к БД)</div>}
+            <div className="mb-8"><h2 className="text-3xl font-bold text-slate-900 mb-3">Запись на персональный разбор</h2><p className="text-slate-500 text-lg">Выберите удобный способ поиска свободного времени.</p></div>
+            
+            <div className="flex p-1.5 bg-slate-100 rounded-xl mb-10">
+              <button onClick={() => { setSearchMode('byDate'); setBookingSlot(null); }} className={`flex-1 py-3 text-sm font-semibold rounded-lg ${searchMode === 'byDate' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500'}`}>Поиск по дате</button>
+              <button onClick={() => { setSearchMode('byDiag'); setBookingSlot(null); }} className={`flex-1 py-3 text-sm font-semibold rounded-lg ${searchMode === 'byDiag' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500'}`}>Поиск по специалисту</button>
+            </div>
+
+            {searchMode === 'byDiag' && (
+              <div className="mb-10 animate-in fade-in"><h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><User size={18} /> Выберите диагноста</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {activeDiagnosticians.map(d => <button key={d.id} onClick={() => setSelectedDiag(d.id)} className={`p-5 rounded-xl border text-left ${selectedDiag === d.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 font-bold text-blue-900' : 'border-slate-200 hover:bg-slate-50 font-bold text-slate-800'}`}>{d.name}</button>)}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-10"><h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Calendar size={18} /> Выберите дату</h3>
+              <select value={selectedDate} onChange={(e) => {setSelectedDate(e.target.value); setBookingSlot(null);}} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-lg outline-none cursor-pointer">
+                {DYNAMIC_DATES.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}
+              </select>
+            </div>
+
+            <div className="mb-8"><h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={18} /> Доступное время</h3>
+              {currentSlots.length === 0 ? <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">Нет свободного времени на выбранную дату</div> : 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {currentSlots.map(s => (
+                    <button key={s.id} disabled={s.status === 'booked'} onClick={() => {if(s.status==='free') setBookingSlot(s);}} className={`flex justify-between items-center p-5 rounded-xl border text-left ${s.status==='booked'?'bg-slate-50 opacity-50 cursor-not-allowed':bookingSlot?.id===s.id?'bg-blue-600 border-blue-600 text-white shadow-lg':'bg-white hover:border-blue-400 text-blue-900'}`}>
+                      <div><div className="font-black text-xl">{s.time}</div>{searchMode === 'byDate' && <div className={`text-sm mt-1 font-medium ${bookingSlot?.id===s.id?'text-blue-100':'text-slate-500'}`}>{diagnosticians.find(d=>d.id===s.diagid)?.name}</div>}</div>
+                      <div className="text-right text-sm font-bold uppercase">{s.status==='booked'?'Занято':'Свободно'}</div>
+                    </button>
+                  ))}
+                </div>
+              }
+            </div>
+
+            {bookingSlot && (
+              <div className="mt-8 p-8 bg-blue-50 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-bottom-4">
+                <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div><label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Имя</label><input type="text" required value={firstName} onChange={e=>setFirstName(e.target.value)} className="w-full px-5 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="Иван" /></div>
+                    <div><label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Фамилия</label><input type="text" required value={lastName} onChange={e=>setLastName(e.target.value)} className="w-full px-5 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="Иванов" /></div>
+                    <div><label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Email</label><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} className="w-full px-5 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="mail@example.com" /></div>
+                    <div><label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Телефон / Telegram</label><input type="text" required value={phone} onChange={handlePhoneInput} className="w-full px-5 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="+7 (999) 000-00-00" /></div>
+                  </div>
+                  <div className="pt-4 flex justify-end gap-3">
+                    <button type="button" onClick={() => setBookingSlot(null)} className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Отмена</button>
+                    <button type="submit" disabled={isBookingNow} className={`px-8 py-3 bg-blue-600 text-white rounded-xl font-bold ${isBookingNow ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700 shadow-md'}`}>{isBookingNow ? 'Отправка...' : 'Подтвердить запись'}</button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+          <Footer />
+          <div className="mt-8 text-center pb-4"><button onClick={onAdminClick} className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-600 text-xs font-semibold uppercase"><Lock size={12} /> Вход для сотрудников</button></div>
+        </div>
+      );
+    }
+
+    // --- КОРНЕВОЙ МАРШРУТИЗАТОР ---
+    function App() {
+      const [currentView, setCurrentView] = useState('client');
+      const [data, setData] = useState({ slots: [], diagnosticians: [] });
+      const [isLoading, setIsLoading] = useState(true);
+      const [isOffline, setIsOffline] = useState(false);
+
+      // Умная загрузка: пытаемся связаться с БД. Если не выходит - включаем демо-режим.
+      const loadData = (offlineAction = null) => {
+        if (isOffline && offlineAction) {
+           let newSlots = [...data.slots];
+           if (offlineAction.action === 'book') newSlots = newSlots.map(s => s.id === offlineAction.id ? {...s, status: 'booked', clientname: offlineAction.clientname, email: offlineAction.email, phone: offlineAction.phone} : s);
+           if (offlineAction.action === 'add') newSlots.push(offlineAction.slot);
+           if (offlineAction.action === 'delete') newSlots = newSlots.filter(s => s.id !== offlineAction.id);
+           if (offlineAction.action === 'cancel') newSlots = newSlots.map(s => s.id === offlineAction.id ? {...s, status: 'free', clientname: null, email: null, phone: null} : s);
+           setData({...data, slots: newSlots});
+           return;
+        }
+
+        fetch('/api/data')
+          .then(r => {
+             if(!r.ok) throw new Error('Сервер недоступен');
+             return r.json();
+          })
+          .then(d => {
+            setData({ slots: d.slots || [], diagnosticians: d.diagnosticians || [] });
+            setIsLoading(false);
+            setIsOffline(false);
+          })
+          .catch(e => {
+            console.warn("Включен режим предпросмотра (сервер базы данных недоступен)");
+            setData({ slots: FALLBACK_SLOTS, diagnosticians: FALLBACK_DIAGS });
+            setIsLoading(false);
+            setIsOffline(true);
+          });
+      };
+      
+      useEffect(() => { 
+        loadData();
+        if(sessionStorage.getItem('gp_token')) setCurrentView('admin');
+      }, []);
+
+      if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="text-slate-500 font-medium">Загрузка данных...</div></div>;
+      if (currentView === 'login') return <LoginScreen onLogin={()=>setCurrentView('admin')} onCancel={()=>setCurrentView('client')} isOffline={isOffline} />;
+      if (currentView === 'admin') return <AdminDashboard slots={data.slots} diagnosticians={data.diagnosticians} onLogout={()=>setCurrentView('client')} refreshData={loadData} isOffline={isOffline} />;
+      return <ClientWidget slots={data.slots} diagnosticians={data.diagnosticians} onAdminClick={()=>setCurrentView('login')} refreshData={loadData} isOffline={isOffline} />;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
